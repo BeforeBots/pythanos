@@ -48,19 +48,21 @@ class Snap:
         return [f for f in Path(directory).iterdir()
                 if f.is_file() and not f.name.startswith(".")]
 
-    def get_nth_dirs(self, n=1):
+    def get_nth_dirs(self, path=None, n=1):
+        if path is not None:
+            self.output = path
         assert Path(self.output).is_dir(), f"Invalid directory fed."
+        return self._get_nth_dirs(self.output, n)
+
+    def _get_nth_dirs(self, path, n=1):
         dirs = []
-        for e in Path(self.output).iterdir():
+        for e in Path(path).iterdir():
             if e.is_dir():
-                if len(e.split("/")) == n+1:
+                if len(str(Path(e).relative_to(self.output)).split("/")) == 1 and n == 1:
                     dirs.append(e)
-                elif len(e.split("\\")) == n+1:
-                    dirs.append(e)
-                elif len(e.split("//")) == n+1:
-                    dirs.append(e)
-                elif len(e.split("\\\\")) == n+1:
-                    dirs.append(e)
+                else:
+                    for i in self._get_nth_dirs(e, n-1):
+                        dirs.append(i)
         return dirs
 
     def isValidURL(self):
@@ -139,7 +141,7 @@ class Snap:
                 i = 0
         print("\r", f"{message} : ", f"DONE", end=f'  ', flush=True)
 
-    def progbar(self, curr, total, message):
+    def progbar(self, curr, total, message=""):
         frac = curr/total
         filled_progbar = round(frac*100)
         print('\r', f"{message} : ",
@@ -199,11 +201,14 @@ class Snap:
         self.output = output
 
         exts = list(set(exts))
+        len_exts = len(exts)
         list_by_exts = []
         files = self.setup_files(self.inputvar)
-        for i_exts in exts:
+        for i, i_exts in enumerate(exts):
             temp = [f for f in files if f.split(".")[-1] == i_exts]
-            list_by_exts.append([temp, f"group_by_"+i_exts])
+            list_by_exts.append([temp, f"group_by_{i_exts}"])
+            self.progbar(i, len_exts, f"grouping by {i_exts}")
+            print("\n")
         if create_mode == 'copy':
             self.copy_files(list_by_exts, None, False)
         else:

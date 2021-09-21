@@ -129,3 +129,5 @@ dmypy.json
 .pyre/
 
 pythanos/download/
+__pycache__/
+pythanos/__pycache__/
