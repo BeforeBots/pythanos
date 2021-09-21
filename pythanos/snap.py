@@ -13,7 +13,7 @@ class Snap:
 
     def __init__(self, inputvar) -> None:
         self.inputvar = inputvar
-        self.download_file_name = "download.xyz"
+        self.download_file_name = f"download.xyz"
         self.download_file_type = self.download_file_name.split('.')[-1]
         self.download_complete_path = Path.joinpath(
             Path.cwd(), self.download_file_name)
@@ -22,7 +22,7 @@ class Snap:
         self.split_ratio = (0.8, 0.1, 0.1)
         self.split_fixed = (100, 100)
         self.seed = 69
-        self.output = "output"
+        self.output = f"output"
         self.split_train_idx = None
         self.split_val_idx = None
         self.use_test = False
@@ -47,6 +47,21 @@ class Snap:
     def list_files(self, directory) -> List:
         return [f for f in Path(directory).iterdir()
                 if f.is_file() and not f.name.startswith(".")]
+
+    def get_nth_dirs(self, n=1):
+        assert Path(self.output).is_dir(), f"Invalid directory fed."
+        dirs = []
+        for e in Path(self.output).iterdir():
+            if e.is_dir():
+                if len(e.split("/")) == n+1:
+                    dirs.append(e)
+                elif len(e.split("\\")) == n+1:
+                    dirs.append(e)
+                elif len(e.split("//")) == n+1:
+                    dirs.append(e)
+                elif len(e.split("\\\\")) == n+1:
+                    dirs.append(e)
+        return dirs
 
     def isValidURL(self):
         regex = r"\A(((https?|ftp)://|(www|ftp)\.))?[a-z0-9-]+(\.[a-z0-9-]+)+([/?].*)?\Z"
@@ -84,12 +99,6 @@ class Snap:
         with urllib.request.urlopen(self.inputvar) as response, open(
                 self.download_complete_path, 'wb') as out_file:
             shutil.copyfileobj(response, out_file)
-
-    def progbar(self, curr, total):
-        frac = curr/total
-        filled_progbar = round(frac*100)
-        print('\r', f'#'*filled_progbar + f'-'*(100 - filled_progbar),
-              f"""[{frac:>7.2%}] [{curr}/{total}]""", end='', flush=True)
 
     def _zip(self, base_name='download',
              output_format='zip', root_dir=Path.cwd()):
@@ -130,6 +139,13 @@ class Snap:
                 i = 0
         print("\r", f"{message} : ", f"DONE", end=f'  ', flush=True)
 
+    def progbar(self, curr, total, message):
+        frac = curr/total
+        filled_progbar = round(frac*100)
+        print('\r', f"{message} : ",
+              f'#'*filled_progbar + f'-'*(100 - filled_progbar),
+              f"""[{frac:>7.2%}] [{curr}/{total}]""", end='', flush=True)
+
     def ratio(self, output="output", seed=69,
               ratio=(0.8, 0.1, 0.1), create_mode='copy'):
 
@@ -144,6 +160,8 @@ class Snap:
 
         for class_dir in self.list_dirs(self.inputvar):
             self.split_class_dir_ratio(class_dir)
+
+        return self.output
 
     def fixed(self, output="output", seed=69,
               fixed=(100, 100), create_mode='copy'):
@@ -168,9 +186,35 @@ class Snap:
                 )
             )
 
+        return self.output
+
+    def group_by_exts(self, output="output", exts=['jpg', 'pdf'],
+                      seed=69, create_mode='copy'):
+        assert isinstance(
+            exts, list), f"All extensions must be passed in a list"
+        assert create_mode in ('copy', 'move'), f"Invalid create mode"
+
+        self.seed = seed
+        self.create_mode = create_mode
+        self.output = output
+
+        exts = list(set(exts))
+        list_by_exts = []
+        files = self.setup_files(self.inputvar)
+        for i_exts in exts:
+            temp = [f for f in files if f.split(".")[-1] == i_exts]
+            list_by_exts.append([temp, f"group_by_"+i_exts])
+        if create_mode == 'copy':
+            self.copy_files(list_by_exts, None, False)
+        else:
+            self.move_files(list_by_exts, None, False)
+
+        return self.output
+
     def setup_files(self, class_dir):
         random.seed(self.seed)
         files = self.list_files(class_dir)
+        files.sort()
         random.shuffle(files)
         return files
 
@@ -184,15 +228,15 @@ class Snap:
 
         li = self.split_files(files)
         if self.create_mode == 'copy':
-            self.copy_files(li, class_dir, self.output)
+            self.copy_files(li, class_dir)
         else:
-            self.move_files(li, class_dir, self.output)
+            self.move_files(li, class_dir)
 
     def split_class_dir_fixed(self, class_dir):
         files = self.setup_files(class_dir, self.seed)
 
-        if not len(files) > sum(self.split_fixed):
-            raise ValueError()
+        assert len(files) < sum(
+            self.split_fixed), f"No of files>split fixed passed. Invalid input"
 
         self.split_train_idx = len(files) - sum(self.split_fixed)
         self.split_val_idx = self.split_train_idx + self.split_fixed[0]
@@ -200,9 +244,9 @@ class Snap:
 
         li = self.split_files(files)
         if self.create_mode == 'copy':
-            self.copy_files(li, class_dir, self.output)
+            self.copy_files(li, class_dir)
         else:
-            self.move_files(li, class_dir, self.output)
+            self.move_files(li, class_dir)
         return len(files)
 
     def split_files(self, files):
@@ -210,47 +254,51 @@ class Snap:
         files_val = (files[self.split_train_idx:self.split_val_idx]
                      if self.use_test else files[self.split_train_idx:])
 
-        li = [(files_train, "train"), (files_val, "val")]
+        li = [[files_train, "train"], [files_val, "val"]]
 
         if self.use_test:
             files_test = files[self.split_val_idx:]
-            li.append((files_test, "test"))
+            li.append([files_test, "test"])
         return li
 
-    def copy_files(self, files_type, class_dir):
-        class_name = path.split(class_dir)[1]
-        for (files, folder_type) in files_type:
-            full_path = path.join(self.output, folder_type, class_name)
-
+    def copy_files(self, files_type, class_dir=None, create_class_name=True):
+        class_name = None
+        if create_class_name is True:
+            class_name = path.split(class_dir)[1]
+        for files, folder_type in files_type:
+            full_path = None
+            if create_class_name is True:
+                full_path = path.join(self.output, folder_type, class_name)
+            else:
+                full_path = path.join(self.output, folder_type)
+            curr_file_len = len(files)
             Path(full_path).mkdir(parents=True, exist_ok=True)
-            for f in files:
-                if type(f) == tuple:
+            for i, f in enumerate(files):
+                self.progbar(i+1, curr_file_len, f"Copying into {folder_type}")
+                if type(f) == list:
                     for x in f:
                         shutil.copy2(x, full_path)
                 else:
                     shutil.copy2(f, full_path)
+            print("\n")
 
-    def move_files(self, files_type, class_dir):
-        class_name = path.split(class_dir)[1]
-        for (files, folder_type) in files_type:
-            full_path = path.join(self.output, folder_type, class_name)
-
+    def move_files(self, files_type,  class_dir=None, create_class_name=True):
+        class_name = None
+        if create_class_name is True:
+            class_name = path.split(class_dir)[1]
+        for files, folder_type in files_type:
+            full_path = None
+            if create_class_name is True:
+                full_path = path.join(self.output, folder_type, class_name)
+            else:
+                full_path = path.join(self.output, folder_type)
+            curr_file_len = len(files)
             Path(full_path).mkdir(parents=True, exist_ok=True)
-            for f in files:
-                if type(f) == tuple:
+            for i, f in enumerate(files):
+                self.progbar(i+1, curr_file_len, f"Moving into {folder_type}")
+                if type(f) == list:
                     for x in f:
                         shutil.move(x, full_path)
                 else:
                     shutil.move(f, full_path)
-
-# abcd = r"""http://i3.ytimg.com/vi/J---aiyznGQ/mqdefault.jpg"""
-# Snap(abcd).download_from_url(
-#     filename=r"abcd.jpg")
-
-# x = Snap(abcd)
-
-# for i in range(100066+1):
-#     x.progbar(i, 100066)
-# print()
-
-# Snap("").zip()
+            print("\n")
