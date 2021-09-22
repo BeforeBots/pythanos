@@ -7,6 +7,7 @@ import urllib.request
 import concurrent.futures
 import time
 from os import path
+import socket
 
 
 class Snap:
@@ -326,3 +327,45 @@ class Snap:
                 else:
                     shutil.move(f, full_path)
             print("\n")
+
+    def send_to_server(self, separator=f"<SEPARATOR>", buffer_size=4096,
+                       host=f"192.168.1.109", port=5000, delay=5):
+
+        assert buffer_size >= 0, f"buffer size can't be negative."
+        assert delay >= 0, f"delay can't be negative."
+        assert separator not in ('', None), f"separator can't be None or empty"
+        assert Path(self.inputvar).is_file(), f"Input path must be a file"
+        assert port >= 0, f"port can't be negative"
+        assert re.match(r"([0-9]{1,3}\.){3}[0-9]{1,3}", host), f"""
+        host address is invalid.
+        It must be of format - xxx.xxx.xxx.xxx where x = digit"""
+
+        for i in range(delay, -1, -1):
+            print("\r", f"Connecting to server in {i} seconds",
+                  end='', flush=True)
+
+        s = socket.socket()
+        print(f"[+] Connecting to {host}:{port}")
+
+        try:
+            s.connect((host, port))
+        except Exception:
+            print("Invalid host and port address")
+            return False
+
+        print(f"[+] Connected to ", host)
+        filesize = round((Path(self.inputvar).stat().st_size)/(1024*1024), 2)
+        print(f"Sending {Path(self.inputvar).stem} with size {filesize} MB")
+        s.send(f"{Path(self.inputvar).stem}{separator}{filesize}".encode())
+
+        with open(self.inputvar, "rb") as f:
+            while True:
+                bytes_read = f.read(buffer_size)
+                if not bytes_read:
+                    break
+                s.sendall(bytes_read)
+                self.progbar(round(bytes_read/(1024*1024), 2),
+                             filesize, "Uploading")
+        s.close()
+
+        return True
