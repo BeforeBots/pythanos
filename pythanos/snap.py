@@ -195,24 +195,43 @@ class Snap:
         assert isinstance(
             exts, list), f"All extensions must be passed in a list"
         assert create_mode in ('copy', 'move'), f"Invalid create mode"
+        assert self.inputvar not in ('', None), f"Invalid input dir."
 
         self.seed = seed
         self.create_mode = create_mode
-        self.output = output
+        self.output = Path.joinpath(Path(self.inputvar).parent, output)
 
         exts = list(set(exts))
         len_exts = len(exts)
         list_by_exts = []
         files = self.setup_files(self.inputvar)
         for i, i_exts in enumerate(exts):
-            temp = [f for f in files if f.split(".")[-1] == i_exts]
+            temp = [f for f in files if str(f).split(".")[-1] == i_exts]
             list_by_exts.append([temp, f"group_by_{i_exts}"])
-            self.progbar(i, len_exts, f"grouping by {i_exts}")
-            print("\n")
+            self.progbar(i+1, len_exts, f"grouping by {exts}")
+        print("\n")
         if create_mode == 'copy':
             self.copy_files(list_by_exts, None, False)
         else:
             self.move_files(list_by_exts, None, False)
+
+        return self.output
+
+    def rglob(self, regex=r'*', output="output",
+              recursive=True, create_mode='copy'):
+        self.output = Path.joinpath(Path(self.inputvar).parent, output)
+        files = []
+        if recursive is True:
+            files = files.append(
+                ["group_by_rglob", list(Path(self.inputvar).rglob(regex))])
+        else:
+            files = files.append(
+                ["group_by_glob", list(Path(self.inputvar).glob(regex))])
+
+        if create_mode == 'copy':
+            self.copy_files(files, None, False)
+        else:
+            self.move_files(files, None, False)
 
         return self.output
 
