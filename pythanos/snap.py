@@ -79,6 +79,81 @@ class Snap:
         else:
             return False
 
+    def is_valid_dir(self, allowed_exts=['.jpg', '.png']):
+
+        assert type(allowed_exts) == list, f"""
+        Allowed extensions should be a list"""
+        assert len(allowed_exts) > 0, f"""
+        Allowed extensions list can't be empty"""
+
+        allowed_exts = list(set(allowed_exts))
+
+        dir_depth_1_with_files = []
+        empty_dirs_depth_1 = []
+        dirs_at_depth_2 = []
+        exts_files = []
+
+        for e in Path(self.inputvar).iterdir():
+            temp_dirs_at_depth_2 = []
+            temp_exts_files = []
+            if e.is_dir():
+                check_empty = True
+                for i in Path(e).iterdir():
+                    check_empty = False
+                    if i.is_dir():
+                        temp_dirs_at_depth_2.append(i.name)
+                    elif ''.join(i.suffixes) in allowed_exts:
+                        temp_exts_files.append(i.name)
+                else:
+                    if check_empty is True:
+                        empty_dirs_depth_1.append(e.name)
+            else:
+                dir_depth_1_with_files.append(e.name)
+            if not temp_dirs_at_depth_2:
+                dirs_at_depth_2.append([e.name, temp_dirs_at_depth_2])
+            if not temp_exts_files:
+                exts_files.append([e.name, temp_exts_files])
+
+        if dir_depth_1_with_files:
+            print(f"*"*70)
+            print(f"""(1) The root directory {self.inputvar.name}
+             contains files at depth 1 -""")
+            for i in dir_depth_1_with_files:
+                print(f"-> {i}")
+
+        if empty_dirs_depth_1:
+            print(f"*"*70)
+            print(f"""(1) The root directory {self.inputvar.name}
+            contains empty directories at depth 1 -""")
+            for i in empty_dirs_depth_1:
+                print(f"-> {i}")
+
+        if dirs_at_depth_2:
+            print(f"*"*70)
+            print(f"These are the list of empty directories at depth 1")
+            for i, f in enumerate(dirs_at_depth_2):
+                print("\n", f"""({i}) The root directory {f[0]}
+                at depth 1 contains empty directories -""")
+                for p in f:
+                    print(f"-> {p}")
+
+        if exts_files:
+            print(f"*"*70)
+            print(f"These are the list of empty directories at depth 1")
+            for i, f in enumerate(exts_files):
+                print("\n", f"""({i}) The root directory {f[0]}
+                at depth 1 has unwanted files with extensions at depth 2 -""")
+                for p in f:
+                    print(f"-> {p}")
+
+        assert len(dir_depth_1_with_files) == 0 and len(
+            empty_dirs_depth_1) and len(dirs_at_depth_2) and len(
+                exts_files) == 0, f"Some checks haven't passed."
+
+        print(f"[+] All checks passed.")
+
+        return True
+
     def download_from_url(self, save_path=None, filename=None):
         if save_path is not None and filename is not None:
             self.download_complete_path = save_path
@@ -113,10 +188,15 @@ class Snap:
             output_format='zip', root_dir=Path.cwd()):
         start = time.time()
         self.run_loader = True
-        with concurrent.futures.ThreadPoolExecutor(max_workers=2) as executor:
-            executor.submit(self.loader, "zipping")
-            executor.submit(self._zip, base_name, output_format, root_dir)
-        print("\n", f"Zipping this took -> ", (time.time())-start, f" seconds")
+
+        try:
+            with concurrent.futures.ThreadPoolExecutor(max_workers=2) as e:
+                e.submit(self.loader, "zipping")
+                e.submit(self._zip, base_name, output_format, root_dir)
+            print("\n", f"Zipping this took -> ",
+                  (time.time())-start, f" seconds")
+        except Exception as err:
+            print(err)
 
     def _unzip(self, filename=None, extract_dir=Path.cwd()):
         shutil.unpack_archive(filename=filename, extract_dir=extract_dir)
@@ -125,11 +205,15 @@ class Snap:
     def unzip(self, filename=None, extract_dir=Path.cwd()):
         start = time.time()
         self.run_loader = True
-        with concurrent.futures.ThreadPoolExecutor(max_workers=2) as executor:
-            executor.submit(self.loader, "unzipping")
-            executor.submit(self._zip, filename, extract_dir)
-        print("\n", f"Unzipping this took -> ",
-              (time.time())-start, f" seconds")
+
+        try:
+            with concurrent.futures.ThreadPoolExecutor(max_workers=2) as e:
+                e.submit(self.loader, "unzipping")
+                e.submit(self._zip, filename, extract_dir)
+            print("\n", f"Unzipping this took -> ",
+                  (time.time())-start, f" seconds")
+        except Exception as err:
+            print(err)
 
     def loader(self, message):
         loaderanimation = [f'|', f'/', f'-', '\\']
@@ -193,6 +277,7 @@ class Snap:
 
     def group_by_exts(self, output="output", exts=['jpg', 'pdf'],
                       seed=69, create_mode='copy'):
+
         assert isinstance(
             exts, list), f"All extensions must be passed in a list"
         assert create_mode in ('copy', 'move'), f"Invalid create mode"
@@ -206,11 +291,23 @@ class Snap:
         len_exts = len(exts)
         list_by_exts = []
         files = self.setup_files(self.inputvar)
+
         for i, i_exts in enumerate(exts):
             temp = [f for f in files if str(f).split(".")[-1] == i_exts]
+            if len(temp) == 0:
+                print(f"No match found for {i_exts}")
+                continue
+            else:
+                print(f"Matches found for {i_exts}")
             list_by_exts.append([temp, f"group_by_{i_exts}"])
             self.progbar(i+1, len_exts, f"grouping by {exts}")
+
         print("\n")
+
+        if len(list_by_exts) == 0:
+            print(f"No file matches by all extensions.")
+            return None
+
         if create_mode == 'copy':
             self.copy_files(list_by_exts, None, False)
         else:
@@ -220,6 +317,11 @@ class Snap:
 
     def rglob(self, regex=r'*', output="output",
               recursive=True, create_mode='copy'):
+
+        assert recursive in (
+            True, False), f"recursive can only be True or False"
+        assert create_mode in ('copy', 'move'), f"Invalid create mode"
+
         self.output = Path.joinpath(Path(self.inputvar).parent, output)
         files = []
         if recursive is True:
@@ -228,6 +330,10 @@ class Snap:
         else:
             files = files.append(
                 ["group_by_glob", list(Path(self.inputvar).glob(regex))])
+
+        if len(files) == 0:
+            print("No file matches found.")
+            return None
 
         if create_mode == 'copy':
             self.copy_files(files, None, False)
@@ -287,6 +393,9 @@ class Snap:
         return li
 
     def copy_files(self, files_type, class_dir=None, create_class_name=True):
+
+        assert len(files_type) > 0, f"No files found to be copied."
+
         class_name = None
         if create_class_name is True:
             class_name = path.split(class_dir)[1]
@@ -308,6 +417,9 @@ class Snap:
             print("\n")
 
     def move_files(self, files_type,  class_dir=None, create_class_name=True):
+
+        assert len(files_type) > 0, f"No files found to be moved."
+
         class_name = None
         if create_class_name is True:
             class_name = path.split(class_dir)[1]
@@ -331,7 +443,7 @@ class Snap:
     def send_to_server(self, separator=f"<SEPARATOR>", buffer_size=4096,
                        host=f"192.168.1.109", port=5000, delay=5):
 
-        assert buffer_size >= 0, f"buffer size can't be negative."
+        assert buffer_size > 0, f"buffer size can't be negative."
         assert delay >= 0, f"delay can't be negative."
         assert separator not in ('', None), f"separator can't be None or empty"
         assert Path(self.inputvar).is_file(), f"Input path must be a file"
@@ -354,7 +466,7 @@ class Snap:
             return False
 
         print(f"[+] Connected to ", host)
-        filesize = round((Path(self.inputvar).stat().st_size)/(1024*1024), 2)
+        filesize = round((Path(self.inputvar).stat().st_size)/(1024*1024), 8)
         print(f"Sending {Path(self.inputvar).stem} with size {filesize} MB")
         s.send(f"{Path(self.inputvar).stem}{separator}{filesize}".encode())
 
@@ -364,7 +476,7 @@ class Snap:
                 if not bytes_read:
                     break
                 s.sendall(bytes_read)
-                self.progbar(round(bytes_read/(1024*1024), 2),
+                self.progbar(round(bytes_read/(1024*1024), 8),
                              filesize, "Uploading")
         s.close()
 
