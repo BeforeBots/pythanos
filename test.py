@@ -1,5 +1,6 @@
 from pythanos.snap import Snap
 from pathlib import Path
+import shutil
 
 # obj = Snap(r"E:\REQ\New folder")
 
@@ -12,8 +13,13 @@ from pathlib import Path
 #     if a is False:
 #         print("yes")
 
-print(Path(r"E:\REQ\New Folder").name)
+# print(Path(r"E:\REQ\New Folder").name)
+# print(type(Path(r"E:\REQ\New Folder")))
+# print(Path(Path(r"E:\REQ\New Folder")).name)
 
+# print(Path(r"E:\REQ\New Folder").joinpath(r"E:\REQ\New Folder\abcd"))
+
+# shutil.rmtree(Path(r"E:\REQ\New Folder1"))
 # # for i in range(10000+1):
 # #     obj.progbar(i, 10000, "yoyo")
 

@@ -79,78 +79,126 @@ class Snap:
         else:
             return False
 
-    def is_valid_dir(self, allowed_exts=['.jpg', '.png']):
-
-        assert type(allowed_exts) == list, f"""
-        Allowed extensions should be a list"""
-        assert len(allowed_exts) > 0, f"""
-        Allowed extensions list can't be empty"""
-
+    def _invalid_dirs_w_paths(self, allowed_exts):
         allowed_exts = list(set(allowed_exts))
-
-        dir_depth_1_with_files = []
-        empty_dirs_depth_1 = []
-        dirs_at_depth_2 = []
+        dir_d1_w_files = []
+        temp_dir_d1_w_files = []
+        empty_dirs_d1 = []
+        temp_empty_dirs_d1 = []
+        dirs_at_d2 = []
         exts_files = []
 
         for e in Path(self.inputvar).iterdir():
-            temp_dirs_at_depth_2 = []
+            temp_dirs_at_d2 = []
             temp_exts_files = []
             if e.is_dir():
                 check_empty = True
                 for i in Path(e).iterdir():
                     check_empty = False
                     if i.is_dir():
-                        temp_dirs_at_depth_2.append(i.name)
+                        temp_dirs_at_d2.append(i)
                     elif ''.join(i.suffixes) in allowed_exts:
-                        temp_exts_files.append(i.name)
+                        temp_exts_files.append(i)
                 else:
                     if check_empty is True:
-                        empty_dirs_depth_1.append(e.name)
+                        temp_empty_dirs_d1.append(e)
             else:
-                dir_depth_1_with_files.append(e.name)
-            if not temp_dirs_at_depth_2:
-                dirs_at_depth_2.append([e.name, temp_dirs_at_depth_2])
+                temp_dir_d1_w_files.append(e)
+            if not temp_dirs_at_d2:
+                dirs_at_d2.append([temp_dirs_at_d2, e])
             if not temp_exts_files:
-                exts_files.append([e.name, temp_exts_files])
+                exts_files.append([temp_exts_files, e])
 
-        if dir_depth_1_with_files:
-            print(f"*"*70)
-            print(f"""(1) The root directory {self.inputvar.name}
-             contains files at depth 1 -""")
-            for i in dir_depth_1_with_files:
-                print(f"-> {i}")
+        if not temp_dir_d1_w_files:
+            dir_d1_w_files.append([temp_dir_d1_w_files, self.inputvar])
 
-        if empty_dirs_depth_1:
-            print(f"*"*70)
-            print(f"""(1) The root directory {self.inputvar.name}
-            contains empty directories at depth 1 -""")
-            for i in empty_dirs_depth_1:
-                print(f"-> {i}")
+        if not temp_empty_dirs_d1:
+            empty_dirs_d1.append([temp_empty_dirs_d1, self.inputvar])
 
-        if dirs_at_depth_2:
-            print(f"*"*70)
-            print(f"These are the list of empty directories at depth 1")
-            for i, f in enumerate(dirs_at_depth_2):
-                print("\n", f"""({i}) The root directory {f[0]}
-                at depth 1 contains empty directories -""")
-                for p in f:
-                    print(f"-> {p}")
+        return (dir_d1_w_files, empty_dirs_d1,
+                dirs_at_d2, exts_files)
 
-        if exts_files:
-            print(f"*"*70)
-            print(f"These are the list of empty directories at depth 1")
-            for i, f in enumerate(exts_files):
-                print("\n", f"""({i}) The root directory {f[0]}
-                at depth 1 has unwanted files with extensions at depth 2 -""")
-                for p in f:
-                    print(f"-> {p}")
+    def is_valid_dir(self, allowed_exts=[f'.jpg', f'.png'],
+                     verbose=1, do_on_err=f'copy', output=f'output'):
 
-        assert len(dir_depth_1_with_files) == 0 and len(
-            empty_dirs_depth_1) and len(dirs_at_depth_2) and len(
-                exts_files) == 0, f"Some checks haven't passed."
+        assert type(allowed_exts) == list, f"""
+        Allowed extensions should be a list"""
+        assert len(allowed_exts) > 0, f"""
+        Allowed extensions list can't be empty"""
+        assert do_on_err in ('copy', 'move', 'delete'), f"""
+        Invalid do on err passed. Can only be copy or move"""
 
-        print(f"[+] All checks passed.")
+        dir_d1_w_files, empty_dirs_d1, dirs_at_d2, \
+            exts_files = self._invalid_dirs_w_paths(allowed_exts)
+
+        if verbose == 1:
+            if dir_d1_w_files:
+                print(f"*"*70)
+                print(f"""(1) The root directory {self.inputvar.name}
+                contains files at depth 1 - """)
+                for i in dir_d1_w_files[0]:
+                    print(f"-> {i.name}")
+            else:
+                print(f"[+] CHECK 1 -> Files at depth 1 -> PASSED")
+
+            if empty_dirs_d1:
+                print(f"*"*70)
+                print(f"""(1) The root directory {self.inputvar.name}
+                contains empty directories at depth 1 - """)
+                for i in empty_dirs_d1[0]:
+                    print(f"-> {i.name}")
+            else:
+                print(f"[+] CHECK 2 -> Empty dirs at depth 1 -> PASSED")
+
+            if dirs_at_d2:
+                print(f"*"*70)
+                print(f"These are the list of empty directories at depth 1")
+                for i, f in enumerate(dirs_at_d2):
+                    print("\n", f"""({i}) The root directory {f[1].name}
+                    at depth 1 contains empty directories - """)
+                    for p in f[0]:
+                        print(f"-> {p.name}")
+            else:
+                print(f"[+] CHECK -> Dirs at depth 2 -> PASSED")
+
+            if exts_files:
+                print(f"*"*70)
+                print(f"These are the list of empty directories at depth 1")
+                for i, f in enumerate(exts_files):
+                    print("\n", f"""({i}) The root directory {f[1].name}
+                    at depth 1 has unwanted files with extensions
+                    at depth 2 - """)
+                    for p in f[0]:
+                        print(f"-> {p.name}")
+            else:
+                print(f"[+] CHECK -> Unwanted file extensions -> PASSED")
+
+        if len(dir_d1_w_files) >= 0 or len(empty_dirs_d1) or len(
+                dirs_at_d2) or len(exts_files) == 0:
+            print(f"[-] Some checks haven't passed.")
+            return False
+        else:
+            print(f"[+] All checks passed.")
+
+        if do_on_err == 'delete':
+            for i in [dir_d1_w_files, exts_files, empty_dirs_d1, dirs_at_d2]:
+                for f, _ in i:
+                    Path(f).unlink()
+            for i in []:
+                for f, _ in i:
+                    shutil.rmtree(f)
+            return True
+
+        for i in [dir_d1_w_files, empty_dirs_d1, dirs_at_d2, exts_files]:
+            for k, _, _ in enumerate(i):
+                i[k][1] = i[k][1].name
+
+        if do_on_err == 'copy':
+            for i in [dir_d1_w_files, empty_dirs_d1, dirs_at_d2, exts_files]:
+                self.copy_files(i, None, False)
+        else:
+            for i in [dir_d1_w_files, empty_dirs_d1, dirs_at_d2, exts_files]:
+                self.move_files(i, None, False)
 
         return True
 
@@ -231,7 +279,7 @@ class Snap:
         filled_progbar = round(frac*100)
         print('\r', f"{message} : ",
               f'#'*filled_progbar + f'-'*(100 - filled_progbar),
-              f"""[{frac:>7.2%}] [{curr}/{total}]""", end='', flush=True)
+              f"""[{frac: > 7.2 %}] [{curr}/{total}]""", end='', flush=True)
 
     def ratio(self, output="output", seed=69,
               ratio=(0.8, 0.1, 0.1), create_mode='copy'):
