@@ -8,6 +8,8 @@ import concurrent.futures
 import time
 from os import path
 import socket
+import json
+import csv
 
 
 class Snap:
@@ -79,7 +81,7 @@ class Snap:
         else:
             return False
 
-    def _invalid_dirs_w_paths(self, allowed_exts=['.jpg', '.png']):
+    def get_all_invalid_dirs_w_paths(self, allowed_exts=['.jpg', '.png']):
 
         allowed_exts = list(set(allowed_exts))
         for i in range(len(allowed_exts)):
@@ -124,7 +126,8 @@ class Snap:
                 dirs_at_d2, exts_files)
 
     def is_valid_dir(self, allowed_exts=['.jpg', '.png'],
-                     verbose=1, do_on_err='copy', output='output'):
+                     verbose=1, do_on_err='copy', output='output',
+                     err_log_mode='json'):
 
         assert type(allowed_exts) == list, f"""
         Allowed extensions should be a list"""
@@ -134,10 +137,7 @@ class Snap:
         Invalid do on err passed. Can only be copy or move"""
         assert verbose in [0, 1], f"Verbose can be 0 (silent) or 1 (normal)"
 
-        if output == 'output':
-            self.output = self.inputvar
-        else:
-            self.output = output
+        self.output = output
 
         check_root_dir_empty = True
 
@@ -151,7 +151,7 @@ class Snap:
                 return None, False
 
         dir_d1_w_files, empty_dirs_d1, dirs_at_d2, \
-            exts_files = self._invalid_dirs_w_paths(allowed_exts)
+            exts_files = self.get_all_invalid_dirs_w_paths(allowed_exts)
 
         if verbose == 1:
             if dir_d1_w_files:
@@ -212,13 +212,26 @@ class Snap:
         else:
             print(f"[+] All checks passed.")
 
+        if err_log_mode == 'json':
+            self.write_to_JSON(dir_d1_w_files, empty_dirs_d1,
+                               dirs_at_d2, exts_files)
+        elif err_log_mode == 'csv':
+            self.write_to_JSON(dir_d1_w_files, empty_dirs_d1,
+                               dirs_at_d2, exts_files)
+        else:
+            self.write_to_text(dir_d1_w_files, empty_dirs_d1,
+                               dirs_at_d2, exts_files)
+
         if do_on_err == 'delete':
-            for i in [dir_d1_w_files, exts_files, empty_dirs_d1, dirs_at_d2]:
-                for f, _ in i:
-                    Path(f).unlink()
-            for i in []:
-                for f, _ in i:
-                    shutil.rmtree(f)
+            for i in [dir_d1_w_files, exts_files]:
+                for x, _ in i:
+                    for f in x:
+                        Path(f).unlink()
+            for i in [empty_dirs_d1, dirs_at_d2]:
+                for x, _ in i:
+                    for f in x:
+                        shutil.rmtree(f)
+            print(f"Unwanted files and directories have been deleted.")
             return None, True
 
         for i in [dir_d1_w_files, empty_dirs_d1, dirs_at_d2, exts_files]:
@@ -238,6 +251,63 @@ class Snap:
                     self.move_files(i, None, False)
 
         return self.output, True
+
+    def write_to_JSON(self, *args):
+        dir_d1_w_files, empty_dirs_d1, dirs_at_d2, exts_files = args
+        dictjson = {}
+
+        dictjson["CHECK 1 -> Files at depth 1"] = str(dir_d1_w_files)
+        dictjson["CHECK 2 -> Empty dirs at depth 1"] = str(empty_dirs_d1)
+        dictjson["CHECK 3 -> Dirs at depth 2"] = str(dirs_at_d2)
+        dictjson["CHECK 4 -> Unwanted file extensions"] = str(exts_files)
+
+        json_object = json.dumps(dictjson, indent=4)
+        filename = Path(self.output).parent.joinpath("errorlog.json")
+
+        print(f"creating JSON log file...")
+
+        with open(filename, "w") as outfile:
+            outfile.write(json_object)
+
+        print(f"created log file successfully.")
+
+        return filename
+
+    def write_to_text(self, *args):
+        dir_d1_w_files, empty_dirs_d1, dirs_at_d2, exts_files = args
+        filename = Path(self.output).parent.joinpath("errorlog.txt")
+        file = open(filename, "w")
+
+        file.write("CHECK 1 -> Files at depth 1")
+        file.write(str(dir_d1_w_files))
+        file.write("CHECK 2 -> Empty dirs at depth 1")
+        file.write(str(empty_dirs_d1))
+        file.write("CHECK 3 -> Dirs at depth 2")
+        file.write(str(dirs_at_d2))
+        file.write("CHECK 4 -> Unwanted file extensions")
+        file.write(str(exts_files))
+
+        file.close()
+
+        return filename
+
+    def write_to_CSV(self, *args):
+        dir_d1_w_files, empty_dirs_d1, dirs_at_d2, exts_files = args
+        filename = Path(self.output).parent.joinpath("errorlog.csv")
+
+        with open(filename, 'w') as file:
+            writer = csv.writer(file)
+            writer.writerow(["SN", "Name", "Contribution"])
+            writer.writerow(["CHECK 1 -> Files at depth 1"])
+            writer.writerow(dir_d1_w_files)
+            writer.writerow(["CHECK 2 -> Empty dirs at depth 1"])
+            writer.writerow(empty_dirs_d1)
+            writer.writerow(["CHECK 3 -> Dirs at depth 2"])
+            writer.writerow(dirs_at_d2)
+            writer.writerow(["CHECK 4 -> Unwanted file extensions"])
+            writer.writerow(exts_files)
+
+        return filename
 
     def download_from_url(self, save_path=None, filename=None):
         if save_path is not None and filename is not None:
@@ -275,13 +345,17 @@ class Snap:
         self.run_loader = True
 
         try:
-            with concurrent.futures.ThreadPoolExecutor(max_workers=2) as e:
+            with concurrent.futures.ProcessPoolExecutor(max_workers=2) as e:
                 e.submit(self.loader, "zipping")
                 e.submit(self._zip, base_name, output_format, root_dir)
             print("\n", f"Zipping this took -> ",
                   (time.time())-start, f" seconds")
-        except Exception as err:
-            print(err)
+        except Exception:
+            print(f"Looks like you aren't using __name__ in your script")
+            print(f"Switching to old method of zipping.")
+            print(f"Started zipping...")
+            self._zip(base_name, output_format, root_dir)
+            print(f"finished zipping successfully!")
 
     def _unzip(self, filename=None, extract_dir=Path.cwd()):
         shutil.unpack_archive(filename=filename, extract_dir=extract_dir)
@@ -292,24 +366,28 @@ class Snap:
         self.run_loader = True
 
         try:
-            with concurrent.futures.ThreadPoolExecutor(max_workers=2) as e:
+            with concurrent.futures.ProcessPoolExecutor(max_workers=2) as e:
                 e.submit(self.loader, "unzipping")
-                e.submit(self._zip, filename, extract_dir)
+                e.submit(self._unzip, filename, extract_dir)
             print("\n", f"Unzipping this took -> ",
                   (time.time())-start, f" seconds")
         except Exception as err:
-            print(err)
+            print(f"Looks like you aren't using __name__ in your script")
+            print(f"Switching to old method of zipping.")
+            print(f"Started unzipping...")
+            self._unzip(filename, extract_dir)
+            print(f"finished zipping successfully!")
 
     def loader(self, message):
         loaderanimation = [f'|', f'/', f'-', '\\']
         i = 0
         while self.run_loader is True:
-            print("\r", f"{message} : ",
+            print("\r\b", f"{message} : ",
                   loaderanimation[i], end=f'  ', flush=True)
             i += 1
             if i >= 4:
                 i = 0
-        print("\r", f"{message} : ", f"DONE", end=f'  ', flush=True)
+        print("\r\b", f"{message} : ", f"DONE", end=f'  ', flush=True)
 
     def progbar(self, curr, total, message=""):
         frac = curr/total
@@ -530,9 +608,9 @@ class Snap:
         for files, folder_type in files_type:
             full_path = None
             if create_class_name is True:
-                full_path = path.join(self.output, folder_type, class_name)
+                full_path = Path(self.output).joinpath(folder_type, class_name)
             elif create_class_name is False:
-                full_path = path.join(self.output, folder_type)
+                full_path = Path(self.output).joinpath(folder_type)
             else:
                 full_path = Path(self.output)
             curr_file_len = len(files)
@@ -564,7 +642,7 @@ class Snap:
         It must be of format - xxx.xxx.xxx.xxx where x = digit"""
 
         for i in range(delay, -1, -1):
-            print("\r", f"Connecting to server in {i} seconds",
+            print("\r\b", f"Connecting to server in {i} seconds",
                   end='', flush=True)
 
         s = socket.socket()

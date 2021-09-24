@@ -2,8 +2,13 @@ from pythanos.snap import Snap
 from pathlib import Path
 import shutil
 
-obj = Snap(r"E:\REQ\abcd")
-obj.is_valid_dir()
+# if __name__ == '__main__':
+#     obj = Snap(r"E:\REQ\abcdefgh")
+#     obj.is_valid_dir(do_on_err='delete')
+
+# if __name__ == '__main__':
+#     obj = Snap(r"E:\REQ\abcd")
+#     obj.zip(root_dir=r"E:\REQ\abcd")
 # a = False
 
 # for i in Path(r"E:\REQ\New folder\5").iterdir():
@@ -16,6 +21,9 @@ obj.is_valid_dir()
 # else:
 #     if a is False:
 #         print("yes")
+if __name__ == '__main__':
+    obj = Snap(r"E:\REQ\abcd")
+    obj.is_valid_dir(err_log_mode='json')
 
 # print(Path(r"E:\REQ\New Folder").name)
 # print(type(Path(r"E:\REQ\New Folder")))
