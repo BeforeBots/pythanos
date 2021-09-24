@@ -23,7 +23,7 @@ class Snap:
         self.split_ratio = (0.8, 0.1, 0.1)
         self.split_fixed = (100, 100)
         self.seed = 69
-        self.output = f"output"
+        self.output = "output"
         self.split_train_idx = None
         self.split_val_idx = None
         self.use_test = False
@@ -79,8 +79,12 @@ class Snap:
         else:
             return False
 
-    def _invalid_dirs_w_paths(self, allowed_exts):
+    def _invalid_dirs_w_paths(self, allowed_exts=['.jpg', '.png']):
+
         allowed_exts = list(set(allowed_exts))
+        for i in range(len(allowed_exts)):
+            allowed_exts[i] = allowed_exts[i].lower()
+
         dir_d1_w_files = []
         temp_dir_d1_w_files = []
         empty_dirs_d1 = []
@@ -97,29 +101,30 @@ class Snap:
                     check_empty = False
                     if i.is_dir():
                         temp_dirs_at_d2.append(i)
-                    elif ''.join(i.suffixes) in allowed_exts:
-                        temp_exts_files.append(i)
+                    elif i.parent.is_dir():
+                        if ''.join(i.suffixes).lower() not in allowed_exts:
+                            temp_exts_files.append(i)
                 else:
                     if check_empty is True:
                         temp_empty_dirs_d1.append(e)
             else:
                 temp_dir_d1_w_files.append(e)
-            if not temp_dirs_at_d2:
+            if temp_dirs_at_d2:
                 dirs_at_d2.append([temp_dirs_at_d2, e])
-            if not temp_exts_files:
+            if temp_exts_files:
                 exts_files.append([temp_exts_files, e])
 
-        if not temp_dir_d1_w_files:
-            dir_d1_w_files.append([temp_dir_d1_w_files, self.inputvar])
+        if temp_dir_d1_w_files:
+            dir_d1_w_files.append([temp_dir_d1_w_files, Path(self.output)])
 
-        if not temp_empty_dirs_d1:
-            empty_dirs_d1.append([temp_empty_dirs_d1, self.inputvar])
+        if temp_empty_dirs_d1:
+            empty_dirs_d1.append([temp_empty_dirs_d1, Path(self.output)])
 
         return (dir_d1_w_files, empty_dirs_d1,
                 dirs_at_d2, exts_files)
 
-    def is_valid_dir(self, allowed_exts=[f'.jpg', f'.png'],
-                     verbose=1, do_on_err=f'copy', output=f'output'):
+    def is_valid_dir(self, allowed_exts=['.jpg', '.png'],
+                     verbose=1, do_on_err='copy', output='output'):
 
         assert type(allowed_exts) == list, f"""
         Allowed extensions should be a list"""
@@ -127,6 +132,23 @@ class Snap:
         Allowed extensions list can't be empty"""
         assert do_on_err in ('copy', 'move', 'delete'), f"""
         Invalid do on err passed. Can only be copy or move"""
+        assert verbose in [0, 1], f"Verbose can be 0 (silent) or 1 (normal)"
+
+        if output == 'output':
+            self.output = self.inputvar
+        else:
+            self.output = output
+
+        check_root_dir_empty = True
+
+        for e in Path(self.inputvar).iterdir():
+            if e.is_dir() or e.is_file():
+                check_root_dir_empty = False
+                break
+        else:
+            if check_root_dir_empty:
+                print(f"[-] CHECK -> Root directory not empty -> FAILED")
+                return None, False
 
         dir_d1_w_files, empty_dirs_d1, dirs_at_d2, \
             exts_files = self._invalid_dirs_w_paths(allowed_exts)
@@ -134,49 +156,59 @@ class Snap:
         if verbose == 1:
             if dir_d1_w_files:
                 print(f"*"*70)
-                print(f"""(1) The root directory {self.inputvar.name}
-                contains files at depth 1 - """)
-                for i in dir_d1_w_files[0]:
-                    print(f"-> {i.name}")
+                print(f"[-] CHECK 1 -> Files at depth 1 -> FAILED", "\n")
+                print(f"""(1) Root directory "{Path(self.output).name}" """)
+                print(f"contains files at depth 1, namely - ")
+                for i in dir_d1_w_files[0][0]:
+                    print(f"""-> "{i.name}" """)
             else:
+                print(f"*"*70)
                 print(f"[+] CHECK 1 -> Files at depth 1 -> PASSED")
 
             if empty_dirs_d1:
                 print(f"*"*70)
-                print(f"""(1) The root directory {self.inputvar.name}
-                contains empty directories at depth 1 - """)
-                for i in empty_dirs_d1[0]:
-                    print(f"-> {i.name}")
+                print(f"[-] CHECK 2 -> Empty dirs at depth 1 -> FAILED", "\n")
+                print(f"""(1) Root directory "{Path(self.output).name}" """)
+                print(f"contains empty directories at depth 1, namely - ")
+                for i in empty_dirs_d1[0][0]:
+                    print(f"""-> "{i.name}" """)
             else:
+                print(f"*"*70)
                 print(f"[+] CHECK 2 -> Empty dirs at depth 1 -> PASSED")
 
             if dirs_at_d2:
                 print(f"*"*70)
+                print(f"[-] CHECK 3 -> Dirs at depth 2 -> FAILED", "\n")
                 print(f"These are the list of empty directories at depth 1")
                 for i, f in enumerate(dirs_at_d2):
-                    print("\n", f"""({i}) The root directory {f[1].name}
-                    at depth 1 contains empty directories - """)
+                    print("\n", f"""({i+1}) Directory "{f[1].name}" """)
+                    print(f"at depth 1 contains empty directories, namely -")
                     for p in f[0]:
-                        print(f"-> {p.name}")
+                        print(f"""-> "{p.name}" """)
             else:
-                print(f"[+] CHECK -> Dirs at depth 2 -> PASSED")
+                print(f"*"*70)
+                print(f"[+] CHECK 3 -> Dirs at depth 2 -> PASSED")
 
             if exts_files:
                 print(f"*"*70)
-                print(f"These are the list of empty directories at depth 1")
+                print(
+                    f"[-] CHECK 4 -> Unwanted file extensions -> FAILED", "\n")
+                print(f"These are the list of directories with")
+                print(f"unwanted extension files at depth 1")
                 for i, f in enumerate(exts_files):
-                    print("\n", f"""({i}) The root directory {f[1].name}
-                    at depth 1 has unwanted files with extensions
-                    at depth 2 - """)
+                    print(
+                        "\n", f"""({i+1}) Directory "{f[1].name}" at depth""")
+                    print(f"1 has files with unwanted extensions, namely")
                     for p in f[0]:
-                        print(f"-> {p.name}")
+                        print(f"""-> "{p.name}" """)
             else:
-                print(f"[+] CHECK -> Unwanted file extensions -> PASSED")
+                print(f"*"*70)
+                print(f"[+] CHECK 4 -> Unwanted file extensions -> PASSED")
 
-        if len(dir_d1_w_files) >= 0 or len(empty_dirs_d1) or len(
-                dirs_at_d2) or len(exts_files) == 0:
-            print(f"[-] Some checks haven't passed.")
-            return False
+        if len(dir_d1_w_files) > 0 or len(empty_dirs_d1) > 0 or len(
+                dirs_at_d2) > 0 or len(exts_files) > 0:
+            if verbose == 0:
+                print(f"[-] Some checks haven't passed.")
         else:
             print(f"[+] All checks passed.")
 
@@ -187,20 +219,25 @@ class Snap:
             for i in []:
                 for f, _ in i:
                     shutil.rmtree(f)
-            return True
+            return None, True
 
         for i in [dir_d1_w_files, empty_dirs_d1, dirs_at_d2, exts_files]:
-            for k, _, _ in enumerate(i):
+            for k, _ in enumerate(i):
                 i[k][1] = i[k][1].name
 
         if do_on_err == 'copy':
-            for i in [dir_d1_w_files, empty_dirs_d1, dirs_at_d2, exts_files]:
-                self.copy_files(i, None, False)
+            for i in [dirs_at_d2, exts_files]:
+                if len(i) > 0:
+                    self.copy_files(i, None, False)
+            for i in [dir_d1_w_files, empty_dirs_d1]:
+                if len(i) > 0:
+                    self.copy_files(i, None, None)
         else:
-            for i in [dir_d1_w_files, empty_dirs_d1, dirs_at_d2, exts_files]:
-                self.move_files(i, None, False)
+            for i in [dir_d1_w_files, dirs_at_d2, exts_files, empty_dirs_d1]:
+                if len(i) > 0:
+                    self.move_files(i, None, False)
 
-        return True
+        return self.output, True
 
     def download_from_url(self, save_path=None, filename=None):
         if save_path is not None and filename is not None:
@@ -277,9 +314,9 @@ class Snap:
     def progbar(self, curr, total, message=""):
         frac = curr/total
         filled_progbar = round(frac*100)
-        print('\r', f"{message} : ",
+        print('\r\b', f"{message} : ",
               f'#'*filled_progbar + f'-'*(100 - filled_progbar),
-              f"""[{frac: > 7.2 %}] [{curr}/{total}]""", end='', flush=True)
+              f"""[{frac:>7.2%}] [{curr}/{total}]""", end='', flush=True)
 
     def ratio(self, output="output", seed=69,
               ratio=(0.8, 0.1, 0.1), create_mode='copy'):
@@ -443,6 +480,8 @@ class Snap:
     def copy_files(self, files_type, class_dir=None, create_class_name=True):
 
         assert len(files_type) > 0, f"No files found to be copied."
+        assert create_class_name in (
+            True, False, None), f"Create class name can be True, False or None"
 
         class_name = None
         if create_class_name is True:
@@ -450,23 +489,40 @@ class Snap:
         for files, folder_type in files_type:
             full_path = None
             if create_class_name is True:
-                full_path = path.join(self.output, folder_type, class_name)
+                full_path = Path(self.output).joinpath(folder_type, class_name)
+            elif create_class_name is False:
+                full_path = Path(self.output).joinpath(folder_type)
             else:
-                full_path = path.join(self.output, folder_type)
+                full_path = Path(self.output)
             curr_file_len = len(files)
             Path(full_path).mkdir(parents=True, exist_ok=True)
             for i, f in enumerate(files):
-                self.progbar(i+1, curr_file_len, f"Copying into {folder_type}")
-                if type(f) == list:
-                    for x in f:
-                        shutil.copy2(x, full_path)
+                try:
+                    if type(f) == list:
+                        for x in f:
+                            if Path(x).is_file():
+                                shutil.copy2(x, full_path)
+                            elif Path(x).is_dir():
+                                c_path = Path(full_path).joinpath(f.name)
+                                shutil.copytree(x, c_path, symlinks=True)
+                    else:
+                        if Path(f).is_file():
+                            shutil.copy2(f, full_path)
+                        elif Path(f).is_dir():
+                            c_path = Path(full_path).joinpath(f.name)
+                            shutil.copytree(f, c_path, symlinks=True)
+                except Exception as e:
+                    print(e)
                 else:
-                    shutil.copy2(f, full_path)
+                    self.progbar(i+1, curr_file_len,
+                                 f"Copying into {folder_type}")
             print("\n")
 
     def move_files(self, files_type,  class_dir=None, create_class_name=True):
 
         assert len(files_type) > 0, f"No files found to be moved."
+        assert create_class_name in (
+            True, False, None), f"Create class name can be True, False or None"
 
         class_name = None
         if create_class_name is True:
@@ -475,17 +531,24 @@ class Snap:
             full_path = None
             if create_class_name is True:
                 full_path = path.join(self.output, folder_type, class_name)
-            else:
+            elif create_class_name is False:
                 full_path = path.join(self.output, folder_type)
+            else:
+                full_path = Path(self.output)
             curr_file_len = len(files)
             Path(full_path).mkdir(parents=True, exist_ok=True)
             for i, f in enumerate(files):
-                self.progbar(i+1, curr_file_len, f"Moving into {folder_type}")
-                if type(f) == list:
-                    for x in f:
-                        shutil.move(x, full_path)
+                try:
+                    if type(f) == list:
+                        for x in f:
+                            shutil.move(x, full_path)
+                    else:
+                        shutil.move(f, full_path)
+                except Exception as e:
+                    print(e)
                 else:
-                    shutil.move(f, full_path)
+                    self.progbar(i+1, curr_file_len,
+                                 f"Moving into {folder_type}")
             print("\n")
 
     def send_to_server(self, separator=f"<SEPARATOR>", buffer_size=4096,
