@@ -10,6 +10,8 @@ from os import path
 import socket
 import json
 import csv
+import http.server
+import socketserver
 
 
 class Snap:
@@ -208,8 +210,10 @@ class Snap:
         if len(dir_d1_w_files) > 0 or len(empty_dirs_d1) > 0 or len(
                 dirs_at_d2) > 0 or len(exts_files) > 0:
             if verbose == 0:
+                print(f"*"*70)
                 print(f"[-] Some checks haven't passed.")
         else:
+            print(f"*"*70)
             print(f"[+] All checks passed.")
 
         if err_log_mode == 'json':
@@ -276,6 +280,9 @@ class Snap:
     def write_to_text(self, *args):
         dir_d1_w_files, empty_dirs_d1, dirs_at_d2, exts_files = args
         filename = Path(self.output).parent.joinpath("errorlog.txt")
+
+        print(f"creating text log file...")
+
         file = open(filename, "w")
 
         file.write("CHECK 1 -> Files at depth 1")
@@ -289,10 +296,15 @@ class Snap:
 
         file.close()
 
+        print(f"created text file successfully.")
+
         return filename
 
     def write_to_CSV(self, *args):
         dir_d1_w_files, empty_dirs_d1, dirs_at_d2, exts_files = args
+
+        print(f"creating CSV log file...")
+
         filename = Path(self.output).parent.joinpath("errorlog.csv")
 
         with open(filename, 'w') as file:
@@ -306,6 +318,8 @@ class Snap:
             writer.writerow(dirs_at_d2)
             writer.writerow(["CHECK 4 -> Unwanted file extensions"])
             writer.writerow(exts_files)
+
+        print(f"created CSV log file successfully.")
 
         return filename
 
@@ -637,16 +651,17 @@ class Snap:
         assert separator not in ('', None), f"separator can't be None or empty"
         assert Path(self.inputvar).is_file(), f"Input path must be a file"
         assert port >= 0, f"port can't be negative"
-        assert re.match(r"([0-9]{1,3}\.){3}[0-9]{1,3}", host), f"""
+        assert re.match(r"((^(([0-9]{1,3}\.){3}[0-9]{1,3})$)|(^(?!localhost)$))|((^(?!(([0-9]{1,3}\.){3}[0-9]{1,3}))$)|(^localhost$))", host), f"""
         host address is invalid.
         It must be of format - xxx.xxx.xxx.xxx where x = digit"""
 
         for i in range(delay, -1, -1):
             print("\r\b", f"Connecting to server in {i} seconds",
                   end='', flush=True)
+            time.sleep(1)
 
         s = socket.socket()
-        print(f"[+] Connecting to {host}:{port}")
+        print("\n", f"[+] Connecting to {host}:{port}")
 
         try:
             s.connect((host, port))
@@ -670,3 +685,25 @@ class Snap:
         s.close()
 
         return True
+
+    def serve(self, host="localhost", port=8000, delay=10):
+
+        assert delay >= 0, f"delay can't be negative."
+        assert re.match(r"((^(([0-9]{1,3}\.){3}[0-9]{1,3})$)|(^(?!localhost)$))|((^(?!(([0-9]{1,3}\.){3}[0-9]{1,3}))$)|(^localhost$))", host), f"""
+        host address is invalid.
+        It must be of format - xxx.xxx.xxx.xxx where x = digit"""
+        assert port >= 0, f"port can't be negative"
+
+        for i in range(delay, -1, -1):
+            print("\r\b", f"Connecting to server in {i} seconds",
+                  end=' ', flush=True)
+            time.sleep(1)
+
+        class MyHttpRequestHandler(http.server.SimpleHTTPRequestHandler):
+            def do_GET(self):
+                return http.server.SimpleHTTPRequestHandler.do_GET(self)
+
+        handler_object = MyHttpRequestHandler
+        my_server = socketserver.TCPServer((host, port), handler_object)
+        print("\n", f"Server started at port -> {port}")
+        my_server.serve_forever()
